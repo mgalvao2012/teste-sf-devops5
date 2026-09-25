@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Blocks direct pushes to major branches (integration/uat/production).
+# All changes must go through a feature/* or fix/* branch + Pull Request.
+# Enable once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+PROTECTED_REGEX='^(integration|uat|production)$'
+
+# stdin lines: <local_ref> <local_sha> <remote_ref> <remote_sha> — only remote_ref is used.
+blocked=0
+while read -r _ _ remote_ref _; do
+	branch="${remote_ref#refs/heads/}"
+	if [[ "$branch" =~ $PROTECTED_REGEX ]]; then
+		echo "✋ Push direto para '$branch' bloqueado." >&2
+		echo "   Crie uma branch feature/* ou fix/* e abra um Pull Request." >&2
+		blocked=1
+	fi
+done
+
+exit "$blocked"

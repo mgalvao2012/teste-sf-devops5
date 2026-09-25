@@ -1,0 +1,5 @@
+# Production branch -> Production org.
+# Deploy is gated by the GitHub Environment 'production' required reviewers.
+# No mergeTargets: production is the terminal branch. Tag it before every deploy.
+targetUsername: CHANGE_ME-prod@example.com   # username or alias of the Production org
+instanceUrl: https://login.salesforce.com    # production login URL

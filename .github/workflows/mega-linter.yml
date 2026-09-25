@@ -1,0 +1,53 @@
+---
+# MegaLinter (sfdx-hardis companion) — static analysis, linting, formatting and secret
+# detection on PRs. The Salesforce flavor bundles Salesforce Code Analyzer (PMD), ESLint,
+# Prettier, secret detection and copy-paste detection.
+#
+# Together with check-deploy.yml (deploy simulation + impacted Apex tests) this forms Gate A:
+# - mega-linter.yml   -> code quality / lint / format / secrets
+# - check-deploy.yml   -> deployability + Apex tests + coverage
+#
+# MegaLinter runs with sane defaults; drop a `.mega-linter.yml` at the repo root to tune it.
+on:
+  pull_request:
+    # Major branches of this project (see config/.sfdx-hardis.yml -> majorBranches)
+    branches:
+      - production
+      - uat
+      - integration
+
+name: MegaLinter
+permissions: read-all
+concurrency:
+  group: ${{ github.event.pull_request.number }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  megalinter:
+    name: MegaLinter
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write # Allows MegaLinter to post the lint summary comment on the PR
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # full history so MegaLinter can lint only the PR delta
+
+      - name: MegaLinter
+        uses: oxsecurity/megalinter/flavors/salesforce@v8
+        env:
+          VALIDATE_ALL_CODEBASE: false # only files changed in the PR
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Archive MegaLinter reports
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MegaLinter reports
+          path: |
+            megalinter-reports
+            mega-linter.log

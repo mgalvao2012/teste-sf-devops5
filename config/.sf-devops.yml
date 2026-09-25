@@ -1,0 +1,34 @@
+# sf-devops POLICY OVERLAY (thin). The engine (deploy, delta, packages, branch/org
+# mapping, test selection) is sfdx-hardis — see config/.sfdx-hardis.yml.
+# This file holds only what the framework enforces on top of hardis.
+project:
+  name: teste-sf-devops5              # e.g. acme-crm
+
+devhub:
+  required: true               # preflight fails fast if the Dev Hub is not reachable
+  alias: DevHub                # authenticated Dev Hub alias (set once, manually)
+
+scratchOrg:
+  definitionFile: config/project-scratch-def.json
+  durationDays: 7
+
+environments:
+  integration:
+    orgAlias: int
+  uat:
+    orgAlias: uat
+    sandboxType: Partial       # Full | Partial -> drives seed volume + whether perf tests run
+    approvers:                 # designated team/person (fail-closed if empty)
+      - gh-team:CHANGE_ME-qa
+  production:
+    orgAlias: prod
+    approvers:
+      - gh-team:CHANGE_ME-release-managers
+
+dataSeeding:
+  configDir: data/sfdmu        # SFDMU export.json + anonymization mock rules
+  targets:
+    - scratch
+    - sandbox-after-refresh
+
+# NOTE: managed-package dependencies now live in config/.sfdx-hardis.yml (installedPackages).

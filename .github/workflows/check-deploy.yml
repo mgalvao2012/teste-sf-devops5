@@ -1,0 +1,106 @@
+---
+# PR check-only deployment (sfdx-hardis) — Gate A.
+# Runs on every PR targeting a major branch: computes the delta, runs impacted Apex tests
+# and Code Analyzer, and does a check-only (validate) deploy against the PR's TARGET org.
+# Nothing is deployed here — merges trigger process-deploy.yml, which does the real deploy.
+#
+# Manual updates in job step "Login & Check Deployment" below:
+# - variables for additional branches: add a SFDX_AUTH_URL_<BRANCH> variable (branch name uppercased)
+# - To use slack notifications, you can also define SLACK_TOKEN and SLACK_CHANNEL_ID
+on:
+  pull_request:
+    # Major branches of this project (see config/.sfdx-hardis.yml -> majorBranches)
+    branches:
+      - production
+      - uat
+      - integration
+
+name: Check Deployment (sfdx-hardis)
+permissions: read-all
+concurrency:
+  group: ${{ github.event.pull_request.number }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  check_deployment:
+    name: Check-only Deployment to Major Org
+    runs-on: ubuntu-latest
+    # Same sfdx-hardis image as process-deploy.yml — pin a version for reproducible runs.
+    container: ghcr.io/hardisgroupcom/sfdx-hardis-ubuntu:latest
+    permissions:
+      pull-requests: write # Allows sfdx-hardis to post the check-deploy status comment on the PR
+      issues: write
+      contents: read
+    steps:
+      # Git Checkout
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # full history so hardis delta can diff against the base branch
+      # The sfdx-hardis container runs as a different user than the checkout owner,
+      # so git refuses to operate (dubious ownership) — mark the workspace safe.
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # For a PR, the config/target org is the BASE branch (PR target), not the head branch.
+      # Delta mode intersects the git delta with a base manifest (smart.js -> this.packageXmlFile):
+      # deployed set = base ∩ delta. This repo ships NO static manifest/package.xml on purpose — a
+      # stale one would silently drop any type it omits (the ASA silent-drop bug). Generate it fresh
+      # from the checked-out source every run so base ⊇ delta and the deployed set equals the PR's
+      # changed metadata. Without this file, delta crashes with ENOENT ./config/package.xml (full
+      # mode tolerates a missing manifest; delta copies it before the empty-check).
+      - name: Generate base manifest for delta deployment
+        run: |
+          if [ -d force-app ]; then
+            sf project generate manifest --source-dir force-app --output-dir manifest --name package
+          else
+            echo "No force-app directory — skipping base manifest generation."
+          fi
+      # GITHUB_BASE_REF is already the bare branch name (no refs/heads/ prefix).
+      - name: Set env.BRANCH
+        run: echo "BRANCH=$GITHUB_BASE_REF" >> "$GITHUB_ENV"
+      # LWC unit tests (Jest) — Apex tests run inside the check-only deploy below;
+      # static analysis / lint / secrets run in the companion mega-linter.yml workflow.
+      - name: LWC unit tests (Jest)
+        run: |
+          if ls force-app/main/default/lwc/*/ >/dev/null 2>&1; then
+            npm install && npm run test:unit
+          else
+            echo "No LWC in project — skipping Jest."
+          fi
+      # Login & check-only deploy with impacted test classes & code coverage
+      - name: Login & Check Deployment
+        env:
+          # Auth URL method (force://...) — sfdx-hardis:auth:login reads SFDX_AUTH_URL_<BRANCH> first.
+          # One secret per major branch; the suffix must match the uppercased branch name.
+          SFDX_AUTH_URL_INTEGRATION: ${{ secrets.SFDX_AUTH_URL_INTEGRATION }}
+          SFDX_AUTH_URL_UAT: ${{ secrets.SFDX_AUTH_URL_UAT }}
+          SFDX_AUTH_URL_PRODUCTION: ${{ secrets.SFDX_AUTH_URL_PRODUCTION }}
+          SFDX_AUTH_URL_TECHNICAL_ORG: ${{ secrets.SFDX_AUTH_URL_TECHNICAL_ORG }}
+          SFDX_DEPLOY_WAIT_MINUTES: ${{ vars.SFDX_DEPLOY_WAIT_MINUTES || '120' }}
+          SFDX_TEST_WAIT_MINUTES: ${{ vars.SFDX_TEST_WAIT_MINUTES || '120' }}
+          CI_COMMIT_REF_NAME: ${{ env.BRANCH }} # Defines the target branch of the PR
+          ORG_ALIAS: ${{ env.BRANCH }} # Defines the target org alias (= target branch)
+          CONFIG_BRANCH: ${{ env.BRANCH }} # Defines the config branch (= target branch)
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          NOTIF_EMAIL_ADDRESS: ${{ secrets.NOTIF_EMAIL_ADDRESS }}
+          JIRA_HOST: ${{ secrets.JIRA_HOST }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          FORCE_COLOR: "1"
+        run: |
+          echo "Check-only SFDX deployment using Hardis against \"$CONFIG_BRANCH\""
+          sf hardis:auth:login
+          sf hardis:project:deploy:smart --check
+
+      # Upload sfdx-hardis reports, including the complete deployment result JSON
+      - name: Archive sfdx-hardis reports
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sfdx-hardis reports
+          path: hardis-report

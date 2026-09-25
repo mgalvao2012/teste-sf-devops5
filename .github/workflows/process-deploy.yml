@@ -1,0 +1,125 @@
+---
+# Manual updates in in job step "Login & Process Deployment" below:
+# - variables for additional branches: add a SFDX_AUTH_URL_<BRANCH> variable (branch name uppercased)
+# - To use slack notifications, you can also define SLACK_TOKEN and SLACK_CHANNEL_ID
+#   - For branch scoped messages, add SLACK_CHANNEL_ID_ + branch name (ex: SLACK_CHANNEL_ID_INTEGRATION, SLACK_CHANNEL_ID_UAT)
+on:
+  push:
+    # Major branches of this project (see config/.sfdx-hardis.yml -> majorBranches)
+    branches:
+      - production
+      - uat
+      - integration
+
+name: Process Deployment (sfdx-hardis)
+permissions: read-all
+concurrency:
+  group: ${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  process_deployment:
+    name: Process Deployment to Major Org
+    runs-on: ubuntu-latest
+    # Required-reviewer sign-off for UAT/Production: the branch name maps to a GitHub Environment
+    # (Settings > Environments) whose "Required reviewers" must approve before this job runs.
+    # Create Environments named 'uat' and 'production' (optionally 'integration' with no reviewers).
+    environment: ${{ github.ref_name }}
+    # Job runs in sfdx-hardis docker image, that includes Salesforce CLI and all required plugins & dependencies.
+    # You can use latest, beta or a version number (ex: v7.23.0), and pin a version if you need reproducible runs.
+    # Images are also mirrored on Docker Hub, if your infrastructure can only pull from docker.io: hardisgroupcom/sfdx-hardis-ubuntu:latest
+    # To use coding agents for auto-fix of deployment errors, use image ghcr.io/hardisgroupcom/sfdx-hardis-ubuntu-with-agents:latest
+    container: ghcr.io/hardisgroupcom/sfdx-hardis-ubuntu:latest
+    permissions:
+      pull-requests: write # Allows sfdx-hardis to post deployment status comments on the Pull Request
+      issues: write
+      contents: read
+      # To allow coding agents to push auto-fix branches and create Pull Requests,
+      # replace "contents: read" above by "contents: write"
+    steps:
+      # Git Checkout
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      # The sfdx-hardis container runs as a different user than the checkout owner,
+      # so git refuses every command with "detected dubious ownership". Mark the
+      # workspace as safe before any hardis/git step runs.
+      - name: Mark workspace as safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # Delta mode intersects the git delta with a base manifest (smart.js -> this.packageXmlFile):
+      # deployed set = base ∩ delta. This repo ships NO static manifest/package.xml on purpose — a
+      # stale one would silently drop any type it omits (the ASA silent-drop bug). Generate it fresh
+      # from the checked-out source every run so base ⊇ delta and the deployed set equals the PR's
+      # changed metadata. Without this file, delta crashes with ENOENT ./config/package.xml (full
+      # mode tolerates a missing manifest; delta copies it before the empty-check).
+      - name: Generate base manifest for delta deployment
+        run: |
+          if [ -d force-app ]; then
+            sf project generate manifest --source-dir force-app --output-dir manifest --name package
+          else
+            echo "No force-app directory — skipping base manifest generation."
+          fi
+        # Set env branch variable (github.ref_name seems to not work)
+      - name: Set env.BRANCH
+        run: echo "BRANCH=$(echo "$GITHUB_REF" | cut -d'/' -f 3)" >> "$GITHUB_ENV"
+      # Login & check deploy with test classes & code coverage
+      - name: Login & Process Deployment
+        if: ${{ !startsWith(github.ref_name, 'auto-fix/') }}
+        env:
+          # Auth URL method (force://...) — sfdx-hardis:auth:login reads SFDX_AUTH_URL_<BRANCH> first.
+          # One secret per major branch; the suffix must match the uppercased branch name.
+          SFDX_AUTH_URL_INTEGRATION: ${{ secrets.SFDX_AUTH_URL_INTEGRATION }}
+          SFDX_AUTH_URL_UAT: ${{ secrets.SFDX_AUTH_URL_UAT }}
+          SFDX_AUTH_URL_PRODUCTION: ${{ secrets.SFDX_AUTH_URL_PRODUCTION }}
+          SFDX_AUTH_URL_TECHNICAL_ORG: ${{ secrets.SFDX_AUTH_URL_TECHNICAL_ORG }}
+          SFDX_DEPLOY_WAIT_MINUTES: ${{ vars.SFDX_DEPLOY_WAIT_MINUTES || '120' }}
+          SFDX_TEST_WAIT_MINUTES: ${{ vars.SFDX_TEST_WAIT_MINUTES || '120' }}
+          # Quick Deploy: reuse the deployment already validated by check-deploy.yml on the PR
+          # (equivalent to Salesforce's "Quick Deploy" button — skips re-running Apex tests, shortens the window).
+          # sfdx-hardis enables it automatically when PR comments are configured (pull-requests: write, below);
+          # set the repo variable SFDX_HARDIS_QUICK_DEPLOY=false to force a full deploy with test re-run.
+          SFDX_HARDIS_QUICK_DEPLOY: ${{ vars.SFDX_HARDIS_QUICK_DEPLOY || 'true' }}
+          CI_COMMIT_REF_NAME: ${{ env.BRANCH }} # Defines the target branch of the PR
+          ORG_ALIAS: ${{ env.BRANCH }} # Defines the target branch of the PR
+          CONFIG_BRANCH: ${{ env.BRANCH }} # Defines the target branch of the PR
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uncomment to allow coding agents to push auto-fix branches and create Pull Requests
+          # (also requires "contents: write" in the permissions above, the sfdx-hardis-ubuntu-with-agents image, and an AI API key below)
+          # CI_SFDX_HARDIS_GITHUB_PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          # SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          # NOTIF_EMAIL_ADDRESS: ${{ secrets.NOTIF_EMAIL_ADDRESS }}
+          # JIRA_HOST: ${{ secrets.JIRA_HOST }}
+          # JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          # JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          # JIRA_PAT: ${{ secrets.JIRA_PAT }}
+          # Uncomment to provide API keys for coding agent auto-fix of deployment errors
+          # ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_COLOR: "1"
+        run: |
+          echo "Process SFDX deployment using Hardis against \"$CONFIG_BRANCH\""
+          # Optional: allow coding agents to git push and create PRs (safe no-op if token is missing)
+          if [ -n "${CI_SFDX_HARDIS_GITHUB_PUSH_TOKEN:-}" ]; then
+            git config user.email "sfdx-hardis-bot@cloudity.com"
+            git config user.name "sfdx-hardis Bot"
+            GITHUB_HOST=$(echo "${GITHUB_SERVER_URL:-https://github.com}" | sed -E 's#^https?://##')
+            git remote set-url origin "https://x-access-token:${CI_SFDX_HARDIS_GITHUB_PUSH_TOKEN}@${GITHUB_HOST}/${GITHUB_REPOSITORY}.git"
+            echo "[sfdx-hardis] GitHub push/PR auth enabled for coding agents"
+          else
+            echo "[sfdx-hardis] Skipping coding-agent GitHub auth setup: CI_SFDX_HARDIS_GITHUB_PUSH_TOKEN is not set"
+          fi
+          sf hardis:auth:login
+          sf hardis:project:deploy:smart
+
+      # Upload sfdx-hardis reports, including the complete deployment result JSON
+      - name: Archive sfdx-hardis reports
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sfdx-hardis reports
+          path: hardis-report

@@ -1,0 +1,23 @@
+{
+  "//": "SFDMU seed plan. source=csvfile loads Account.csv/Contact.csv beside this file.",
+  "//anonymization": "updateWithMockData + mockFields ensure no production PII reaches lower envs.",
+  "objects": [
+    {
+      "query": "SELECT Id, Name, Industry FROM Account",
+      "operation": "Upsert",
+      "externalId": "Name"
+    },
+    {
+      "query": "SELECT Id, FirstName, LastName, Email, Phone, AccountId FROM Contact",
+      "operation": "Upsert",
+      "externalId": "Email",
+      "updateWithMockData": true,
+      "mockFields": [
+        { "name": "FirstName", "pattern": "name" },
+        { "name": "LastName",  "pattern": "name" },
+        { "name": "Email",     "pattern": "email" },
+        { "name": "Phone",     "pattern": "phone" }
+      ]
+    }
+  ]
+}

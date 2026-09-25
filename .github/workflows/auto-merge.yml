@@ -1,0 +1,43 @@
+---
+# Auto-merge on green — Gate A → developmentBranch (integration).
+# Enables GitHub's NATIVE auto-merge on PRs targeting integration. The merge does NOT
+# happen here: GitHub only merges once every REQUIRED status check passes (see branch
+# protection on integration -> required_status_checks context "Check-only Deployment to
+# Major Org", produced by check-deploy.yml). Merging pushes to integration, which triggers
+# process-deploy.yml for the real deploy.
+#
+# Why AUTOMERGE_PAT and not GITHUB_TOKEN:
+#   A merge performed with the built-in GITHUB_TOKEN does NOT trigger other workflows
+#   (GitHub's loop-prevention), so process-deploy.yml would never fire. The PAT must have
+#   `repo` + `workflow` scope and belong to a user allowed to merge into integration.
+#
+# Requirements (one-time, applied by scripts/gh-setup.sh):
+# - "Allow auto-merge" enabled on the repo:  gh repo edit <owner/repo> --enable-auto-merge
+# - Repo secret AUTOMERGE_PAT set (never committed).
+# - Branch protection on integration requiring the check-deploy status check + 0 approvals
+#   (integration has no approvers in .sf-devops.yml → gh-setup applies the relaxed profile).
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches:
+      - integration
+
+name: Auto-merge on green (integration)
+permissions:
+  contents: write
+  pull-requests: write
+concurrency:
+  group: ${{ github.event.pull_request.number }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge
+    runs-on: ubuntu-latest
+    # Skip drafts — auto-merge would sit pending until marked ready anyway.
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Enable native auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_PAT }}   # NOT GITHUB_TOKEN: its merge does not trigger process-deploy
+        run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}" -R "${{ github.repository }}"

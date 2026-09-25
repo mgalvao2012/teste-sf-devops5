@@ -1,0 +1,18 @@
+# MegaLinter tuning for the sf-devops framework.
+# Silences noisy/flaky linters that produce false positives on Salesforce DX + sfdx-hardis
+# repos, while keeping the security-relevant linters (secrets, SAST, actionlint) enforced.
+# Docs: https://megalinter.io/configuration/
+
+VALIDATE_ALL_CODEBASE: false
+
+# Linters removed entirely (spell-check flags domain terms like SFDX/hardis/uppercased;
+# grype repeatedly fails to hydrate its vuln DB in CI -> infra flake, not a code finding).
+DISABLE_LINTERS:
+  - SPELL_CSPELL          # technical vocabulary (SFDX, hardis, NOTIF, hardisgroupcom...)
+  - SPELL_LYCHEE          # external link checker -> rate-limits / transient failures
+  - REPOSITORY_GRYPE      # "vulnerability db does not exist" download/migration flake
+
+# Keep these running for visibility, but do NOT fail the build on their findings.
+DISABLE_ERRORS_LINTERS:
+  - YAML_YAMLLINT         # stylistic (truthy `on:`), non-security
+  - YAML_PRETTIER         # formatting only

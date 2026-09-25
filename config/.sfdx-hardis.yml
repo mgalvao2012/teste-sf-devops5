@@ -1,0 +1,34 @@
+# sfdx-hardis ENGINE config. Owns deploy, delta, test selection, packages, branch/org mapping.
+# The human-facing policy overlay lives in ./.sf-devops.yml (approvers, sandbox type, seeding).
+developmentBranch: integration     # feature branches fork off (and PR back into) integration
+
+# Major branches, each mapped to an org in config/branches/.sfdx-hardis.<branch>.yml
+majorBranches:
+  - integration
+  - uat
+  - production
+
+# Managed-package dependencies. Empty => nothing installed.
+# Add with: sf hardis:package:install   (it appends here), or edit manually.
+installedPackages: []
+
+# Metadata auto-clean before deploy (reduces noisy diffs / merge pain).
+autoCleanTypes:
+  - destructivechanges
+  - flowPositions
+  - listViewsMine
+
+# Apex test strategy for deploys (hardis selects impacted tests for delta by default).
+testLevel: RunLocalTests
+
+# Delta deployments: on a minor->major merge (feature/fix -> integration/uat/production)
+# deploy ONLY the PR's committed metadata (sgd diff HEAD^..HEAD on the merge commit),
+# never the full source. major<->major promotions stay full for safety.
+# Requires healthy branch topology: a feature branch that genuinely diverges from its
+# target. A branch that already contains the whole target makes the post-merge range a
+# no-op (empty delta) — see CLAUDE.md "Gotchas". Config alone does not fix that; keep the
+# feature -> PR -> merge flow (never merge the target back into the feature before the PR).
+useDeltaDeployment: true
+
+# Per-branch target orgs are defined in config/branches/.sfdx-hardis.<branch>.yml
+# (integration, uat, production) — set targetUsername + instanceUrl there.
