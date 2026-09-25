@@ -1,6 +1,6 @@
 # UAT branch -> UAT sandbox (Full or Partial per config/.sf-devops.yml environments.uat.sandboxType).
 # Deploy is gated by the GitHub Environment 'uat' required reviewers + human acceptance sign-off.
-targetUsername: CHANGE_ME-uat@example.com    # username or alias of the UAT org
-instanceUrl: https://test.salesforce.com     # sandbox login URL
+targetUsername: mgalvao@mgalvao-250321-998.demo.uat # username or alias of the UAT org
+instanceUrl: https://mgalvao-250321-998-demo--uat.sandbox.my.salesforce.com # sandbox login URL
 mergeTargets:
-  - production                                # uat may only promote to production
+  - production # uat may only promote to production

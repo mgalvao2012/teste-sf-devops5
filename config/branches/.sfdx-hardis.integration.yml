@@ -1,6 +1,6 @@
 # Integration branch -> Integration sandbox.
 # Feature branches merge here first (cross-feature integration + full regression).
-targetUsername: CHANGE_ME-int@example.com    # username or alias of the Integration org
-instanceUrl: https://test.salesforce.com     # sandbox login URL
+targetUsername: mgalvao@mgalvao-250321-998.demo.dev1 # username or alias of the Integration org
+instanceUrl: https://mgalvao-250321-998-demo--dev1.sandbox.my.salesforce.com/ # sandbox login URL
 mergeTargets:
-  - uat                                       # integration may only promote to uat
+  - uat # integration may only promote to uat
