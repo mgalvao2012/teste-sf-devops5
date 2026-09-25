@@ -19,11 +19,11 @@ environments:
     orgAlias: uat
     sandboxType: Partial       # Full | Partial -> drives seed volume + whether perf tests run
     approvers:                 # designated team/person (fail-closed if empty)
-      - gh-team:CHANGE_ME-qa
+      - gh-user:mgalvao2012
   production:
     orgAlias: prod
     approvers:
-      - gh-team:CHANGE_ME-release-managers
+      - gh-user:mgalvao2012
 
 dataSeeding:
   configDir: data/sfdmu        # SFDMU export.json + anonymization mock rules

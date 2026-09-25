@@ -1,0 +1,35 @@
+sfdxPluginsStdout: "code-analyzer \e[2m5.16.0\e[22m
+
+  data-code-extension \e[2m1.3.1\e[22m
+
+  lightning-dev \e[2m5.1.4\e[22m\e[2m (prerelease)\e[22m
+
+  packaging \e[2m3.0.7\e[22m
+
+  sf-git-merge-driver \e[2m2.0.1\e[22m
+
+  sfdmu \e[2m5.8.0\e[22m
+
+  sfdx-git-delta \e[2m6.45.1\e[22m
+
+  sfdx-hardis \e[2m8.9.2\e[22m
+
+  ui-bundle-dev \e[2m1.2.2\e[22m
+
+  \e[2m\e[22m
+
+  \e[2mUninstalled JIT Plugins:\e[22m
+
+  community \e[2m4.0.5\e[22m
+
+  custom-metadata \e[2m4.0.5\e[22m
+
+  dev \e[2m2.5.5\e[22m
+
+  devops-center \e[2m2.2.0\e[22m
+
+  flow \e[2m2.0.0\e[22m
+
+  signups \e[2m3.0.5\e[22m
+
+  @salesforce/sfdx-plugin-lwc-test \e[2m1.2.1\e[22m\n"
